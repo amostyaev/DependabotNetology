@@ -11,9 +11,7 @@ import kotlinx.serialization.json.Json as SerializationJson
 const val BASE_URL = "https://api.github.com/repos/netology-code/"
 
 val repositories = listOf(
-    "andad-code",
-    "andin-code",
-    "kt-code",
+    "and2-code"
 )
 
 /**
@@ -38,7 +36,7 @@ fun main(args: Array<String>) {
         // Бот не умеет работать с async, если что
         repositories.forEach { repository ->
             client.get<List<Pull>>(urlString = "$BASE_URL$repository/pulls").filter {
-                it.user.login == "dependabot-preview[bot]"
+                it.user.login == "dependabot[bot]"
             }.forEach {
                 client.post<Unit>(urlString = "${it.issueUrl}/comments") {
                     body = IssueComment("""@dependabot merge""")
