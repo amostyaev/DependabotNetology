@@ -5,6 +5,9 @@ import io.ktor.client.features.json.*
 import io.ktor.client.features.json.serializer.*
 import io.ktor.client.features.logging.*
 import io.ktor.client.request.*
+import io.ktor.util.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json as SerializationJson
 
@@ -25,25 +28,37 @@ fun main(args: Array<String>) {
             Logging()
             Json {
                 serializer = KotlinxSerializer(
-                    SerializationJson {
-                        ignoreUnknownKeys = true
-                        isLenient = true
-                    }
+                        SerializationJson {
+                            ignoreUnknownKeys = true
+                            isLenient = true
+                        }
                 )
             }
         }
 
-        // Бот не умеет работать с async, если что
-        repositories.forEach { repository ->
-            client.get<List<Pull>>(urlString = "$BASE_URL$repository/pulls").filter {
-                it.user.login == "dependabot[bot]"
-            }.forEach {
-                client.post<Unit>(urlString = "${it.issueUrl}/comments") {
-                    body = IssueComment("""@dependabot merge""")
-                    header("Authorization", "bearer $token")
-                    header("Content-Type", "application/json")
+        repositories.map { repository ->
+            async {
+                var page = 0
+                while (true) {
+                    client.get<List<Pull>>(urlString = "$BASE_URL$repository/pulls") {
+                        header("Authorization", "bearer $token")
+                        parameter("per_page", 100)
+                        parameter("page", page++)
+                    }.ifEmpty {
+                        return@async
+                    }.filter {
+                        it.user.login == "dependabot[bot]"
+                    }.map {
+                        async {
+                            client.post<Unit>(urlString = "${it.issueUrl}/comments") {
+                                body = IssueComment("""@dependabot merge""")
+                                header("Authorization", "bearer $token")
+                                header("Content-Type", "application/json")
+                            }
+                        }
+                    }.awaitAll()
                 }
             }
-        }
+        }.awaitAll()
     }
 }
